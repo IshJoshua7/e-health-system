@@ -50,5 +50,5 @@ composer test
 
 Notes:
 
-- The project uses `firebase/php-jwt` for JWT handling. If Composer is not installed, `lib/auth.php` contains a minimal fallback for local/dev use; in production you should install Composer and rely on the library.
+- The project requires Composer and uses `firebase/php-jwt` for JWT handling. Install dependencies with `composer install` before running the app or tests.
 - Consider storing `JWT_SECRET` in a secret manager (e.g., GitHub Secrets, Azure Key Vault, AWS Secrets Manager) for production deployments.

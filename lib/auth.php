@@ -5,10 +5,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config.php';
 
-// Load Composer autoload if present (CI / production will install dependencies).
-if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
-    require_once __DIR__ . '/../vendor/autoload.php';
+// Composer autoload must be present in production. Fail fast if missing.
+if (!file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    throw new \RuntimeException('Dependencies are not installed. Run "composer install" before using auth helpers.');
 }
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -36,19 +37,7 @@ function generate_jwt(array $payload, int $exp = 3600): string {
     ]);
 
     $key = jwt_secret();
-    // Use firebase/php-jwt if available; otherwise fall back to a minimal token.
-    if (class_exists('\Firebase\JWT\JWT')) {
-        return JWT::encode($claims, $key, 'HS256');
-    }
-
-    // Minimal fallback (compatible with previous implementation)
-    $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
-    $body = json_encode($claims);
-    $h = base64url_encode($header);
-    $b = base64url_encode($body);
-    $sig = hash_hmac('sha256', "$h.$b", $key, true);
-    $s = base64url_encode($sig);
-    return "$h.$b.$s";
+    return JWT::encode($claims, $key, 'HS256');
 }
 
 /**
@@ -59,27 +48,12 @@ function generate_jwt(array $payload, int $exp = 3600): string {
  */
 function verify_jwt($token) {
     if (!$token) return false;
-    // Try using firebase/php-jwt first
-    if (class_exists('\Firebase\JWT\JWT')) {
-        try {
-            $decoded = JWT::decode($token, new Key(jwt_secret(), 'HS256'));
-            return json_decode(json_encode($decoded), true);
-        } catch (\Throwable $e) {
-            return false;
-        }
+    try {
+        $decoded = JWT::decode($token, new Key(jwt_secret(), 'HS256'));
+        return json_decode(json_encode($decoded), true);
+    } catch (\Throwable $e) {
+        return false;
     }
-
-    // Fallback verification for environments without the library
-    $parts = explode('.', $token);
-    if (count($parts) !== 3) return false;
-    list($header, $body, $sig) = $parts;
-    $expected_raw = hash_hmac('sha256', "$header.$body", jwt_secret(), true);
-    if (!hash_equals($expected_raw, base64url_decode($sig))) return false;
-    $payload_json = base64url_decode($body);
-    $payload = json_decode($payload_json, true);
-    if (!$payload) return false;
-    if (isset($payload['exp']) && time() > $payload['exp']) return false;
-    return $payload;
 }
 
 function base64url_encode($data) {
