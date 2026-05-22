@@ -7,14 +7,17 @@ on:
     branches: [ main ]
 
 jobs:
-  php-lint:
+  php:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-versions: ['7.4', '8.0', '8.1']
     steps:
       - uses: actions/checkout@v4
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
+          php-version: ${{ matrix.php-versions }}
           extensions: mbstring
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
@@ -22,6 +25,4 @@ jobs:
         run: |
           find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
       - name: Run tests
-        run: |
-          composer install --no-interaction --prefer-dist
-          composer test
+        run: composer test
