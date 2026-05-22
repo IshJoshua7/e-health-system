@@ -26,4 +26,31 @@ class AuthTest extends TestCase {
         $this->assertEquals('user1', $decoded['sub']);
         $this->assertArrayHasKey('exp', $decoded);
     }
+
+    public function testExpiredToken() {
+        $payload = ['sub' => 'user2'];
+        // Create token already expired
+        $token = generate_jwt($payload, -10);
+        $this->assertFalse(verify_jwt($token));
+    }
+
+    public function testInvalidSignature() {
+        $payload = ['sub' => 'user3'];
+        $token = generate_jwt($payload, 60);
+        // Corrupt the token signature
+        $parts = explode('.', $token);
+        $parts[2] = strrev($parts[2]);
+        $bad = implode('.', $parts);
+        $this->assertFalse(verify_jwt($bad));
+    }
+
+    public function testGetBearerPayload() {
+        $payload = ['sub' => 'user4'];
+        $token = generate_jwt($payload, 60);
+        $header = 'Bearer ' . $token;
+        $out = get_bearer_payload($header);
+        $this->assertIsArray($out);
+        $this->assertEquals('user4', $out['sub']);
+        $this->assertFalse(get_bearer_payload('Bearer invalid.token.value'));
+    }
 }

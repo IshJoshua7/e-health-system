@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 // JWT helpers using firebase/php-jwt when available.
 // Falls back to a safe default secret lookup for environments without Composer.
 
@@ -19,7 +20,15 @@ function jwt_secret() {
     return 'change-me-please';
 }
 
-function generate_jwt(array $payload, $exp = 3600) {
+/**
+ * Generate a JWT for given payload.
+ * Returns a compact JWT string.
+ *
+ * @param array $payload
+ * @param int $exp lifetime in seconds
+ * @return string
+ */
+function generate_jwt(array $payload, int $exp = 3600): string {
     $now = time();
     $claims = array_merge($payload, [
         'iat' => $now,
@@ -42,6 +51,12 @@ function generate_jwt(array $payload, $exp = 3600) {
     return "$h.$b.$s";
 }
 
+/**
+ * Verify a JWT and return its payload as associative array, or false on failure.
+ *
+ * @param string $token
+ * @return array|false
+ */
 function verify_jwt($token) {
     if (!$token) return false;
     // Try using firebase/php-jwt first
@@ -80,8 +95,15 @@ function base64url_decode($data) {
     return base64_decode(strtr($data, '-_', '+/'));
 }
 
-function require_auth() {
-    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+/**
+ * Parse the Authorization header (or provided header) and return JWT payload or false.
+ * Useful for testing without triggering exits.
+ *
+ * @param string|null $authHeader
+ * @return array|false
+ */
+function get_bearer_payload(?string $authHeader = null) {
+    $h = $authHeader ?? ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
     if (stripos($h, 'Bearer ') === 0) {
         $token = substr($h, 7);
         $payload = verify_jwt($token);
@@ -89,6 +111,16 @@ function require_auth() {
             return $payload;
         }
     }
+    return false;
+}
+
+/**
+ * Require authentication for the current request. On failure this exits with 401.
+ * Use `get_bearer_payload()` in tests to avoid process termination.
+ */
+function require_auth() {
+    $payload = get_bearer_payload();
+    if ($payload) return $payload;
     header('HTTP/1.1 401 Unauthorized');
     echo json_encode(['error' => 'unauthorized']);
     exit;
