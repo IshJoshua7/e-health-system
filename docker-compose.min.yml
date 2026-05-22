@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  app:
+    build: ./minimal
+    ports:
+      - "8080:80"
+    environment:
+      - JWT_SECRET=dev_secret
+    restart: unless-stopped
