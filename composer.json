@@ -1,0 +1,14 @@
+{
+  "name": "ishjoshua/e-health-system",
+  "description": "E-health system",
+  "type": "project",
+  "require": {
+    "php": ">=7.4",
+    "firebase/php-jwt": "^6.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "EHealth\\": "lib/"
+    }
+  }
+}

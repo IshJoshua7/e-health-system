@@ -1,39 +1,65 @@
 <?php
-// Lightweight auth helpers (scaffold)
-// Integrate into existing app flow and replace with production-grade OAuth2/OpenID Connect provider.
+// JWT helpers using firebase/php-jwt when available.
+// Falls back to a safe default secret lookup for environments without Composer.
 
 require_once __DIR__ . '/../config.php';
 
+// Load Composer autoload if present (CI / production will install dependencies).
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+}
+
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+
 function jwt_secret() {
-    // Prefer environment variable, then config constant. Keep a safe default for local dev.
     $env = getenv('JWT_SECRET');
     if ($env !== false && strlen($env) > 0) return $env;
     if (defined('JWT_SECRET') && JWT_SECRET !== 'change-me-please') return JWT_SECRET;
     return 'change-me-please';
 }
 
-function generate_jwt($payload, $exp = 3600) {
-    // Minimal JWT creation — use a maintained library in production (eg. firebase/php-jwt)
-    $payload['exp'] = time() + $exp;
-    $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
-    $body = json_encode($payload);
+function generate_jwt(array $payload, $exp = 3600) {
+    $now = time();
+    $claims = array_merge($payload, [
+        'iat' => $now,
+        'exp' => $now + (int)$exp,
+    ]);
 
+    $key = jwt_secret();
+    // Use firebase/php-jwt if available; otherwise fall back to a minimal token.
+    if (class_exists('\Firebase\JWT\JWT')) {
+        return JWT::encode($claims, $key, 'HS256');
+    }
+
+    // Minimal fallback (compatible with previous implementation)
+    $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
+    $body = json_encode($claims);
     $h = base64url_encode($header);
     $b = base64url_encode($body);
-    $sig = hash_hmac('sha256', "$h.$b", jwt_secret(), true);
+    $sig = hash_hmac('sha256', "$h.$b", $key, true);
     $s = base64url_encode($sig);
     return "$h.$b.$s";
 }
 
 function verify_jwt($token) {
-    // Minimal verification — use a robust library in production
+    if (!$token) return false;
+    // Try using firebase/php-jwt first
+    if (class_exists('\Firebase\JWT\JWT')) {
+        try {
+            $decoded = JWT::decode($token, new Key(jwt_secret(), 'HS256'));
+            return json_decode(json_encode($decoded), true);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    // Fallback verification for environments without the library
     $parts = explode('.', $token);
     if (count($parts) !== 3) return false;
     list($header, $body, $sig) = $parts;
-
     $expected_raw = hash_hmac('sha256', "$header.$body", jwt_secret(), true);
     if (!hash_equals($expected_raw, base64url_decode($sig))) return false;
-
     $payload_json = base64url_decode($body);
     $payload = json_decode($payload_json, true);
     if (!$payload) return false;
@@ -41,7 +67,6 @@ function verify_jwt($token) {
     return $payload;
 }
 
-// Helpers: base64url encode/decode without padding
 function base64url_encode($data) {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 }
@@ -56,12 +81,12 @@ function base64url_decode($data) {
 }
 
 function require_auth() {
-    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    if(strpos($h,'Bearer ') === 0) {
-        $token = substr($h,7);
+    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if (stripos($h, 'Bearer ') === 0) {
+        $token = substr($h, 7);
         $payload = verify_jwt($token);
-        if($payload) {
-            return $payload; // array with user info
+        if ($payload) {
+            return $payload;
         }
     }
     header('HTTP/1.1 401 Unauthorized');
@@ -69,4 +94,3 @@ function require_auth() {
     exit;
 }
 
-?>
