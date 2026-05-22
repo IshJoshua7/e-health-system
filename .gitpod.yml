@@ -1,0 +1,28 @@
+image: gitpod/workspace-full
+
+tasks:
+  - name: Start services
+    init: docker compose build
+    command: |
+      docker compose up --build -d
+      echo "Waiting for DB to be available..."
+      until docker compose exec -T db mysql -uroot -psecret -e "SELECT 1;" >/dev/null 2>&1; do sleep 2; done
+      echo "Importing database schema if present..."
+      if docker compose exec -T db sh -c '[ -f /var/www/html/database.sql ]'; then
+        docker compose exec -T db sh -c 'exec mysql -u root -p"secret" e_health < /var/www/html/database.sql'
+      else
+        echo "No database.sql found, skipping import."
+      fi
+      # Try running composer inside the app container if available
+      if docker compose exec -T app composer --version >/dev/null 2>&1; then
+        docker compose exec -T app composer install --no-interaction --prefer-dist || true
+      fi
+
+ports:
+  - port: 8080
+    onOpen: open-preview
+
+vscode:
+  extensions:
+    - bmewburn.vscode-intelephense-client
+    - felixfbecker.php-debug
