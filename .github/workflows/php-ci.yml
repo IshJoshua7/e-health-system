@@ -21,3 +21,7 @@ jobs:
       - name: Syntax check
         run: |
           find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: Run tests
+        run: |
+          composer install --no-interaction --prefer-dist
+          composer test
